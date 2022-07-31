@@ -1,4 +1,4 @@
-# fresh project
+# Release Cadence - a fresh project
 
 ### Usage
 
