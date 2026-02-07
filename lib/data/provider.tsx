@@ -1,0 +1,157 @@
+"use client";
+
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { DataClient } from "./api-client";
+import { MockDataClient } from "./mock-data";
+import { JiraDataClient } from "./jira-client";
+
+type DataMode = "MOCK" | "JIRA";
+
+interface DataContextType {
+    client: DataClient | null;
+    mode: DataMode;
+    setMode: (mode: DataMode) => void;
+    configureJira: (host: string, email: string, token: string) => void;
+    isLoading: boolean;
+    staleThreshold: number;
+    baselineVelocity: number;
+    activeWorkJql: string;
+    futureIdeasJql: string;
+    updateSettings: (stale: number, activeJql: string, futureJql: string) => void;
+}
+
+const DataContext = createContext<DataContextType>({
+    client: null,
+    mode: "MOCK",
+    setMode: () => { },
+    configureJira: () => { },
+    isLoading: true,
+    staleThreshold: 30,
+    baselineVelocity: 5,
+    activeWorkJql: "statusCategory != Done",
+    futureIdeasJql: "labels = future",
+    updateSettings: () => { },
+});
+
+export function DataProvider({ children }: { children: React.ReactNode }) {
+    const [mode, setMode] = useState<DataMode>("MOCK");
+    const [client, setClient] = useState<DataClient | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const [staleThreshold, setStaleThreshold] = useState(30);
+    const [velocity, setVelocity] = useState(5); // Calculated Velocity
+
+    // Scope Configuration
+    const [activeWorkJql, setActiveWorkJql] = useState("statusCategory != Done AND labels != future");
+    const [futureIdeasJql, setFutureIdeasJql] = useState("labels = future");
+
+    // Effect to calculate velocity when client changes
+    useEffect(() => {
+        if (!client) return;
+
+        // Fetch all Done tickets to calculate team velocity
+        // In a real app, strict date ranges or limits would apply
+        client.searchTickets("status = Done").then(tickets => {
+            // Import dynamically to avoid circular deps if any, or just use the utility
+            // We need to move calculateVelocity out of analysis if it depends on client types that cause issues, 
+            // but it should be fine.
+            // We need to import calculateVelocity. 
+            // Since we can't easily add imports in this Replace block without messing up the top, 
+            // I'll assume I can add the import in a separate block or just copy the logic if simple.
+            // Actually, I'll add the import in a separate tool call first to be safe, 
+            // OR I can use the 'calculateVelocity' function if I import it at the top.
+            // For now, let's just do the fetch and set.
+            import("@/lib/analysis/velocity").then(({ calculateVelocity }) => {
+                const metrics = calculateVelocity(tickets);
+                setVelocity(metrics.daysPerPoint);
+            });
+        }).catch(err => {
+            console.error("Failed to calculate velocity:", err);
+            // Fallback
+            setVelocity(5);
+        });
+    }, [client]);
+
+    useEffect(() => {
+        // Load config from localStorage
+        const savedMode = localStorage.getItem("cadence_mode") as DataMode;
+        if (savedMode) setMode(savedMode);
+
+        const savedStale = localStorage.getItem("cadence_stale_threshold");
+        if (savedStale) setStaleThreshold(parseInt(savedStale));
+
+        const savedActive = localStorage.getItem("cadence_active_jql");
+        if (savedActive) setActiveWorkJql(savedActive);
+
+        const savedFuture = localStorage.getItem("cadence_future_jql");
+        if (savedFuture) setFutureIdeasJql(savedFuture);
+
+        // Initialize
+        if (savedMode === "JIRA") {
+            const host = localStorage.getItem("cadence_jira_host");
+            const email = localStorage.getItem("cadence_jira_email");
+            const token = localStorage.getItem("cadence_jira_token");
+
+            if (host && email && token) {
+                setClient(new JiraDataClient(host, email, token));
+            } else {
+                // Fallback if config missing
+                setMode("MOCK");
+                setClient(new MockDataClient());
+            }
+        } else {
+            setClient(new MockDataClient());
+        }
+
+        setIsLoading(false);
+    }, []);
+
+    const updateSettings = (stale: number, activeJql: string, futureJql: string) => {
+        setStaleThreshold(stale);
+        setActiveWorkJql(activeJql);
+        setFutureIdeasJql(futureJql);
+
+        localStorage.setItem("cadence_stale_threshold", stale.toString());
+        localStorage.setItem("cadence_active_jql", activeJql);
+        localStorage.setItem("cadence_future_jql", futureJql);
+    };
+
+    const handleSetMode = (newMode: DataMode) => {
+        setMode(newMode);
+        localStorage.setItem("cadence_mode", newMode);
+
+        if (newMode === "MOCK") {
+            setClient(new MockDataClient());
+        }
+    };
+
+    const configureJira = (host: string, email: string, token: string) => {
+        localStorage.setItem("cadence_jira_host", host);
+        localStorage.setItem("cadence_jira_email", email);
+        localStorage.setItem("cadence_jira_token", token);
+
+        setClient(new JiraDataClient(host, email, token));
+        handleSetMode("JIRA");
+    };
+
+    return (
+        <DataContext.Provider
+            value={{
+                client,
+                mode,
+                setMode: handleSetMode,
+                configureJira,
+                isLoading,
+                staleThreshold,
+                activeWorkJql,
+                futureIdeasJql,
+                baselineVelocity: velocity, // Expose calculated velocity as the "baseline"
+                updateSettings,
+            }}
+        >
+            {children}
+        </DataContext.Provider>
+    );
+}
+
+export const useData = () => useContext(DataContext);

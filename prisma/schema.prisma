@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  jiraAccountId String   @unique
+  email         String?
+  name          String?
+  avatarUrl     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  config        TeamConfig?
+}
+
+model TeamConfig {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id])
+  
+  // Conversion Settings
+  pointsToHours   Float    @default(4) // 1 point = 4 hours default
+  inflationFactor Float    @default(1.0) // 1.0 = no inflation
+  
+  // Review Settings
+  analysisEnabled Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ContributorStats {
+  id            String   @id @default(cuid())
+  jiraAccountId String
+  component     String   // e.g. "Frontend", "Backend", "API"
+  
+  // Metrics
+  totalTasks    Int      @default(0)
+  totalHours    Float    @default(0)
+  avgVelocity   Float    @default(0) // Tasks per week or similar metric
+  
+  lastUpdated   DateTime @default(now())
+
+  @@unique([jiraAccountId, component])
+}
+
+model Snapshot {
+  id          String   @id @default(cuid())
+  date        DateTime @default(now())
+  
+  // Aggregated Data
+  totalPoints Float
+  totalTime   Float
+  
+  // JSON blob for detailed breakdown if needed
+  data        Json?
+  
+  createdAt   DateTime @default(now())
+}
