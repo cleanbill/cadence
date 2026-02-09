@@ -5,7 +5,10 @@ import { DataClient } from "./api-client";
 import { MockDataClient } from "./mock-data";
 import { JiraDataClient } from "./jira-client";
 
-type DataMode = "MOCK" | "JIRA";
+export enum DataMode {
+    MOCK = "MOCK",
+    JIRA = "JIRA"
+}
 
 interface DataContextType {
     client: DataClient | null;
@@ -22,7 +25,7 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType>({
     client: null,
-    mode: "MOCK",
+    mode: DataMode.MOCK,
     setMode: () => { },
     configureJira: () => { },
     isLoading: true,
@@ -34,7 +37,7 @@ const DataContext = createContext<DataContextType>({
 });
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-    const [mode, setMode] = useState<DataMode>("MOCK");
+    const [mode, setMode] = useState<DataMode>(DataMode.MOCK);
     const [client, setClient] = useState<DataClient | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -87,7 +90,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (savedFuture) setFutureIdeasJql(savedFuture);
 
         // Initialize
-        if (savedMode === "JIRA") {
+        if (savedMode === DataMode.JIRA) {
             const host = localStorage.getItem("cadence_jira_host");
             const email = localStorage.getItem("cadence_jira_email");
             const token = localStorage.getItem("cadence_jira_token");
@@ -96,7 +99,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                 setClient(new JiraDataClient(host, email, token));
             } else {
                 // Fallback if config missing
-                setMode("MOCK");
+                setMode(DataMode.MOCK);
                 setClient(new MockDataClient());
             }
         } else {
@@ -120,7 +123,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setMode(newMode);
         localStorage.setItem("cadence_mode", newMode);
 
-        if (newMode === "MOCK") {
+        if (newMode === DataMode.MOCK) {
             setClient(new MockDataClient());
         }
     };
@@ -131,7 +134,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem("cadence_jira_token", token);
 
         setClient(new JiraDataClient(host, email, token));
-        handleSetMode("JIRA");
+        handleSetMode(DataMode.JIRA);
     };
 
     return (

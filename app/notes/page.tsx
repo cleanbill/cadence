@@ -10,6 +10,12 @@ import { Lightbulb } from "lucide-react";
 export default function NotesPage() {
     const { client } = useData();
     const [ideas, setIdeas] = useState<JiraTicket[]>([]);
+    const [jiraHost, setJiraHost] = useState<string | null>(null);
+
+    useEffect(() => {
+        const host = localStorage.getItem("cadence_jira_host");
+        setJiraHost(host);
+    }, []);
 
     useEffect(() => {
         if (!client) return;
@@ -41,7 +47,18 @@ export default function NotesPage() {
                                         <Lightbulb className="h-5 w-5 text-yellow-500" />
                                         {ticket.summary}
                                     </CardTitle>
-                                    <Badge variant="outline">{ticket.key}</Badge>
+                                    {jiraHost ? (
+                                        <a
+                                            href={`https://${jiraHost}/browse/${ticket.key}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-sm font-mono text-blue-600 dark:text-blue-400 hover:underline"
+                                        >
+                                            {ticket.key}
+                                        </a>
+                                    ) : (
+                                        <Badge variant="outline">{ticket.key}</Badge>
+                                    )}
                                 </div>
                             </CardHeader>
                             <CardContent>

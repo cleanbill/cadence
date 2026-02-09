@@ -13,9 +13,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useData } from "@/lib/data/provider";
+import { DataMode } from "@/lib/data/provider";
 import { Settings, CheckCircle2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 
 export function SettingsDialog() {
     const { mode, setMode, configureJira, staleThreshold, baselineVelocity, activeWorkJql, futureIdeasJql, updateSettings } = useData();
@@ -25,7 +27,7 @@ export function SettingsDialog() {
     const [host, setHost] = useState("");
     const [email, setEmail] = useState("");
     const [token, setToken] = useState("");
-    const [isMock, setIsMock] = useState(mode === "MOCK");
+    const [isMock, setIsMock] = useState(mode === DataMode.MOCK);
 
     // Settings
     const [stale, setStale] = useState(staleThreshold.toString());
@@ -33,7 +35,7 @@ export function SettingsDialog() {
     const [futureJql, setFutureJql] = useState(futureIdeasJql);
 
     useEffect(() => {
-        setIsMock(mode === "MOCK");
+        setIsMock(mode === DataMode.MOCK);
         setStale(staleThreshold.toString());
         setActiveJql(activeWorkJql);
         setFutureJql(futureIdeasJql);
@@ -50,14 +52,17 @@ export function SettingsDialog() {
         updateSettings(newStale, activeJql, futureJql);
 
         if (isMock) {
-            setMode("MOCK");
-        } else {
-            if (host && email && token) {
-                configureJira(host, email, token);
-            } else {
-                setMode("JIRA");
-            }
+            setMode(DataMode.MOCK);
+            setOpen(false);
+            return;
         }
+
+        if (host && email && token) {
+            configureJira(host, email, token);
+        } else {
+            setMode(DataMode.JIRA);
+        }
+
         setOpen(false);
     };
 
@@ -76,15 +81,25 @@ export function SettingsDialog() {
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto px-1">
-                    <div className="flex items-center justify-between space-x-2 border p-4 rounded-md">
+                    <div className={cn(
+                        "flex items-center justify-between space-x-2 border-2 p-4 rounded-md transition-colors",
+                        isMock
+                            ? "border-red-400 bg-red-50 dark:bg-red-950/20"
+                            : "border-green-400 bg-green-50 dark:bg-green-950/20"
+                    )}>
                         <div className="flex flex-col space-y-1">
-                            <Label htmlFor="mock-mode" className="font-medium">Demo Mode (Mock Data)</Label>
-                            <span className="text-xs text-muted-foreground">Use generated data for testing.</span>
+                            <Label htmlFor="mock-mode" className="font-medium">
+                                {isMock ? "🔴 Demo Mode (Mock Data)" : "🟢 Live Mode (Jira Data)"}
+                            </Label>
+                            <span className="text-xs text-muted-foreground">
+                                {isMock ? "Using generated data for testing" : "Connected to real Jira instance"}
+                            </span>
                         </div>
                         <Switch
                             id="mock-mode"
                             checked={isMock}
                             onCheckedChange={setIsMock}
+                            className="data-[state=checked]:bg-black data-[state=unchecked]:bg-black"
                         />
                     </div>
 

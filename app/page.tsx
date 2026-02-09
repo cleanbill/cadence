@@ -1,6 +1,7 @@
 "use client";
 
 import { useData } from "@/lib/data/provider";
+import { DataMode } from "@/lib/data/provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimeBoard } from "@/components/TimeBoard";
@@ -34,7 +35,7 @@ export default function Home() {
               <Button
                 variant="outline"
                 className="w-full h-12 text-lg"
-                onClick={() => setMode("MOCK")}
+                onClick={() => setMode(DataMode.MOCK)}
               >
                 Try Demo Mode (Mock Data)
               </Button>

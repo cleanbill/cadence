@@ -14,6 +14,12 @@ const STALE_THRESHOLD_DAYS = 30;
 export default function FlaggedPage() {
     const { client } = useData();
     const [staleTickets, setStaleTickets] = useState<JiraTicket[]>([]);
+    const [jiraHost, setJiraHost] = useState<string | null>(null);
+
+    useEffect(() => {
+        const host = localStorage.getItem("cadence_jira_host");
+        setJiraHost(host);
+    }, []);
 
     useEffect(() => {
         if (!client) return;
@@ -50,7 +56,18 @@ export default function FlaggedPage() {
                         <Card key={ticket.id} className="flex flex-row items-center justify-between p-4 hover:bg-muted/50 transition-colors">
                             <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-1">
-                                    <Badge variant="outline" className="text-xs">{ticket.key}</Badge>
+                                    {jiraHost ? (
+                                        <a
+                                            href={`https://${jiraHost}/browse/${ticket.key}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:underline"
+                                        >
+                                            {ticket.key}
+                                        </a>
+                                    ) : (
+                                        <Badge variant="outline" className="text-xs">{ticket.key}</Badge>
+                                    )}
                                     <span className="text-xs text-muted-foreground">
                                         Last updated: {differenceInDays(new Date(), parseISO(ticket.updated))} days ago
                                     </span>
