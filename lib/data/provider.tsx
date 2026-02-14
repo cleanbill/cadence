@@ -14,7 +14,7 @@ interface DataContextType {
     client: DataClient | null;
     mode: DataMode;
     setMode: (mode: DataMode) => void;
-    configureJira: (host: string, email: string, token: string) => void;
+    configureJira: () => void;
     isLoading: boolean;
     staleThreshold: number;
     baselineVelocity: number;
@@ -91,17 +91,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
         // Initialize
         if (savedMode === DataMode.JIRA) {
-            const host = localStorage.getItem("cadence_jira_host");
-            const email = localStorage.getItem("cadence_jira_email");
-            const token = localStorage.getItem("cadence_jira_token");
-
-            if (host && email && token) {
-                setClient(new JiraDataClient(host, email, token));
-            } else {
-                // Fallback if config missing
-                setMode(DataMode.MOCK);
-                setClient(new MockDataClient());
-            }
+            // With proxy, we don't need to read credentials from localStorage
+            // We just assume the cookie is there. JiraDataClient will handle it.
+            setClient(new JiraDataClient());
         } else {
             setClient(new MockDataClient());
         }
@@ -128,12 +120,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const configureJira = (host: string, email: string, token: string) => {
-        localStorage.setItem("cadence_jira_host", host);
-        localStorage.setItem("cadence_jira_email", email);
-        localStorage.setItem("cadence_jira_token", token);
-
-        setClient(new JiraDataClient(host, email, token));
+    const configureJira = () => {
+        setClient(new JiraDataClient());
         handleSetMode(DataMode.JIRA);
     };
 

@@ -46,7 +46,7 @@ export function SettingsDialog() {
         if (savedEmail) setEmail(savedEmail);
     }, [mode, open, staleThreshold, activeWorkJql, futureIdeasJql]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         // Save generic settings
         const newStale = parseInt(stale) || 30;
         updateSettings(newStale, activeJql, futureJql);
@@ -57,13 +57,31 @@ export function SettingsDialog() {
             return;
         }
 
-        if (host && email && token) {
-            configureJira(host, email, token);
-        } else {
+        if (!host || !email || !token) {
             setMode(DataMode.JIRA);
+            setOpen(false);
+            return;
         }
 
-        setOpen(false);
+        try {
+            const response = await fetch("/api/auth/jira", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ host, email, apiToken: token }),
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                alert(data.error || "Failed to authenticate with Jira");
+                return;
+            }
+
+            configureJira();
+            setOpen(false);
+        } catch (err) {
+            console.error("Auth error:", err);
+            alert("An error occurred during authentication");
+        }
     };
 
     return (

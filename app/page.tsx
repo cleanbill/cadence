@@ -64,7 +64,26 @@ export default function Home() {
                 <Button
                   className="w-full"
                   disabled={!jiraHost || !jiraEmail || !jiraToken}
-                  onClick={() => configureJira(jiraHost, jiraEmail, jiraToken)}
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/auth/jira", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ host: jiraHost, email: jiraEmail, apiToken: jiraToken }),
+                      });
+
+                      if (!res.ok) {
+                        const data = await res.json();
+                        alert(data.error || "Failed to connect to Jira");
+                        return;
+                      }
+
+                      configureJira();
+                    } catch (err) {
+                      console.error("Connection error:", err);
+                      alert("An error occurred while connecting to Jira");
+                    }
+                  }}
                 >
                   Connect Jira
                 </Button>
