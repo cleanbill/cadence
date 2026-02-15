@@ -3,10 +3,8 @@
 import { useData } from "@/lib/data/provider";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
-import { addDays, format, differenceInBusinessDays } from "date-fns";
-
-const POINTS_TO_DAYS = 0.5;
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { addDays, format } from "date-fns";
 
 interface ProjectionPoint {
     date: string; // "MMM dd"
@@ -17,7 +15,7 @@ interface ProjectionPoint {
 }
 
 export function LandingZoneChart() {
-    const { client, baselineVelocity, activeWorkJql } = useData();
+    const { client, teamVelocity, activeWorkJql, buildLabel, storyPointField } = useData();
     const [data, setData] = useState<ProjectionPoint[]>([]);
     const [landingDates, setLandingDates] = useState<{ opt: string, exp: string, pess: string } | null>(null);
 
@@ -25,66 +23,22 @@ export function LandingZoneChart() {
         if (!client) return;
 
         // Use the configured JQL to fetch Active Scope
-        const jql = activeWorkJql || "statusCategory != Done";
+        const jql = activeWorkJql || `labels = ${buildLabel} AND statusCategory != Done`;
 
-        client.searchTickets(jql).then(tickets => {
-            // Calculate Total Scope (in Days) using dynamic baseline velocity
-            // If a ticket has points, use points * baselineVelocity
-            // If not, assume a default of 0.25 days (or 0) for unestimated work? 
-            // Better to assume a minimum size if unsized, e.g. 1 point equivalent.
-            const totalScopeDays = tickets.reduce((acc, t) => {
+        client.searchTickets(jql, storyPointField).then(tickets => {
+            const totalScopePoints = tickets.reduce((acc, t) => {
                 const points = t.points > 0 ? t.points : 1; // Fallback to 1 point if unsized
-                return acc + (points * baselineVelocity);
+                return acc + points;
             }, 0);
 
-            // Estimate Velocity (Days completed per Calendar Day)
-            // baselineVelocity = Days per Point.
-            // We need "Points per Calendar Day" (or Days of Work per Calendar Day)
-            // If we have 5 devs, and they work 5 days a week...
-            // This is tricky without knowing team size.
-            // FOR NOW: Let's assume the "velocity" metric we have is "Time to complete 1 point".
-            // That doesn't tell us throughput. 
-            // We need "Daily Throughput" (Points/Day) from our velocity calc.
-
-            // Re-fetch velocity metrics? Or expose dailyVelocity in provider?
-            // "baselineVelocity" in context is "Days per Point".
-            // Throughput (Points/Day) = 1 / baselineVelocity (per serial thread).
-            // But we have parallel threads (Team).
-            // Currently our "calculateVelocity" returns { dailyVelocity, daysPerPoint }.
-            // dailyVelocity there was "1 / daysPerPoint", which is wrong for a team.
-
-            // ACTUALLY: The user asked to use historical data.
-            // In 'velocity.ts', calculateVelocity does:
-            // closedTickets.forEach... totalDays += duration.
-            // avgDaysPerPoint = totalDays / totalPoints.
-            // This is "Average Cycle Time per Point".
-
-            // To project landing, we need "Points Completed per Day (Throughput)".
-            // Let's implement a simple throughput calc here based on the SAME data if possible,
-            // OR just hardcode a placeholder "Team Size" multiplier?
-            // User didn't ask for Team Size config.
-            // Let's assume the "Mock Data" implies a team.
-            // Let's try to fetch "Done" tickets here to calculate throughput?
-            // Or better: Let's assume a fixed "Work in Progress" limit or concurrency?
-
-            // Let's stick to the previous hardcoded "TEAM_VELOCITY = 2.0" (Days of Scope per Calendar Day)
-            // but scale it relative to the baselineVelocity changes?
-            // No, getting this right requires specific data.
-            // Let's just use a heuristic:
-            // Team Daily Velocity (Days/Day) ~ (Active Tickets count / avg cycle time)?
-            // Let's just keep the 2.0 placeholder but maybe tweak it?
-            // ACTUALLY: `totalScopeDays` is now based on `baselineVelocity`. 
-            // If velocity increases (days/point goes up), scope days goes up.
-            // If team is constant, completion time goes up.
-            // So constant daily "days completed" is somewhat fair.
-
-            const TEAM_SCOPE_THROUGHPUT = 2.0; // "Days of Scope" burned down per day.
+            // Throughput per Calendar Day = Points per Week / 7
+            const DAILY_THROUGHPUT = Math.max(0.1, teamVelocity / 7);
 
             const projections: ProjectionPoint[] = [];
             const today = new Date();
 
             // We project out until we hit the total Scope + buffer
-            const maxDays = Math.ceil((totalScopeDays / (TEAM_SCOPE_THROUGHPUT * 0.75)) + 10);
+            const maxDays = Math.ceil((totalScopePoints / (DAILY_THROUGHPUT * 0.75)) + 14);
 
             let foundOpt = false, foundExp = false, foundPess = false;
             let dOpt = "", dExp = "", dPess = "";
@@ -93,18 +47,18 @@ export function LandingZoneChart() {
                 const date = addDays(today, i);
                 const dateStr = format(date, "MMM dd");
 
-                // Cumulative Work Completed
-                const optimistic = Math.min(totalScopeDays, i * (TEAM_SCOPE_THROUGHPUT * 1.25));
-                const expected = Math.min(totalScopeDays, i * TEAM_SCOPE_THROUGHPUT);
-                const pessimistic = Math.min(totalScopeDays, i * (TEAM_SCOPE_THROUGHPUT * 0.75));
+                // Cumulative Points Completed
+                const optimistic = Math.min(totalScopePoints, i * (DAILY_THROUGHPUT * 1.25));
+                const expected = Math.min(totalScopePoints, i * DAILY_THROUGHPUT);
+                const pessimistic = Math.min(totalScopePoints, i * (DAILY_THROUGHPUT * 0.75));
 
-                if (!foundOpt && optimistic >= totalScopeDays) { dOpt = dateStr; foundOpt = true; }
-                if (!foundExp && expected >= totalScopeDays) { dExp = dateStr; foundExp = true; }
-                if (!foundPess && pessimistic >= totalScopeDays) { dPess = dateStr; foundPess = true; }
+                if (!foundOpt && optimistic >= totalScopePoints) { dOpt = dateStr; foundOpt = true; }
+                if (!foundExp && expected >= totalScopePoints) { dExp = dateStr; foundExp = true; }
+                if (!foundPess && pessimistic >= totalScopePoints) { dPess = dateStr; foundPess = true; }
 
                 projections.push({
                     date: dateStr,
-                    totalTickets: totalScopeDays,
+                    totalTickets: totalScopePoints,
                     optimistic,
                     expected,
                     pessimistic
@@ -114,23 +68,23 @@ export function LandingZoneChart() {
             setData(projections);
             setLandingDates({ opt: dOpt, exp: dExp, pess: dPess });
         });
-    }, [client, activeWorkJql, baselineVelocity]);
+    }, [client, activeWorkJql, teamVelocity, buildLabel]);
 
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Projected Landing Zones</CardTitle>
                 <CardDescription>
-                    When will all {data[0]?.totalTickets.toFixed(1)} days of scope be completed?
+                    When will all {data[0]?.totalTickets.toFixed(1)} story points of scope be completed?
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <div className="h-[350px] w-full">
+                <div className="h-[350px] w-full min-h-[350px] relative">
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                             <XAxis dataKey="date" minTickGap={30} />
-                            <YAxis label={{ value: 'Days Completed', angle: -90, position: 'insideLeft' }} />
+                            <YAxis label={{ value: 'Story Points', angle: -90, position: 'insideLeft' }} />
                             <Tooltip />
                             <Legend />
 

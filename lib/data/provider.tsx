@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { DataClient } from "./api-client";
-import { MockDataClient } from "./mock-data";
 import { JiraDataClient } from "./jira-client";
 
 export enum DataMode {
@@ -17,10 +16,15 @@ interface DataContextType {
     configureJira: () => void;
     isLoading: boolean;
     staleThreshold: number;
-    baselineVelocity: number;
+    teamVelocity: number; // Points per Week
     activeWorkJql: string;
     futureIdeasJql: string;
-    updateSettings: (stale: number, activeJql: string, futureJql: string) => void;
+    buildLabel: string;
+    storyPointField: string;
+    jiraBoardId: string;
+    teamName: string;
+    teamMembers: { id: string; name: string; role: string }[];
+    updateSettings: (stale: number, activeJql: string, futureJql: string, buildLabel: string, storyPointField: string, jiraBoardId: string, teamName: string, teamMembers: { id: string; name: string; role: string }[], velocity?: number) => void;
 }
 
 const DataContext = createContext<DataContextType>({
@@ -30,9 +34,14 @@ const DataContext = createContext<DataContextType>({
     configureJira: () => { },
     isLoading: true,
     staleThreshold: 30,
-    baselineVelocity: 5,
+    teamVelocity: 10,
     activeWorkJql: "statusCategory != Done",
     futureIdeasJql: "labels = future",
+    buildLabel: "build",
+    storyPointField: "customfield_10026",
+    jiraBoardId: "",
+    teamName: "Core Team",
+    teamMembers: [],
     updateSettings: () => { },
 });
 
@@ -42,38 +51,37 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
 
     const [staleThreshold, setStaleThreshold] = useState(30);
-    const [velocity, setVelocity] = useState(5); // Calculated Velocity
+    const [teamVelocity, setTeamVelocity] = useState(10); // Points per Week
+    const [manualVelocity, setManualVelocity] = useState<number | null>(null);
 
     // Scope Configuration
-    const [activeWorkJql, setActiveWorkJql] = useState("statusCategory != Done AND labels != future");
+    const [activeWorkJql, setActiveWorkJql] = useState("statusCategory != Done");
     const [futureIdeasJql, setFutureIdeasJql] = useState("labels = future");
+    const [buildLabel, setBuildLabel] = useState("build");
+    const [storyPointField, setStoryPointField] = useState("customfield_10026");
+    const [jiraBoardId, setJiraBoardId] = useState("");
+
+    // Team Configuration
+    const [teamName, setTeamName] = useState("Core Team");
+    const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; role: string }[]>([]);
 
     // Effect to calculate velocity when client changes
     useEffect(() => {
         if (!client) return;
 
-        // Fetch all Done tickets to calculate team velocity
-        // In a real app, strict date ranges or limits would apply
-        client.searchTickets("status = Done").then(tickets => {
-            // Import dynamically to avoid circular deps if any, or just use the utility
-            // We need to move calculateVelocity out of analysis if it depends on client types that cause issues, 
-            // but it should be fine.
-            // We need to import calculateVelocity. 
-            // Since we can't easily add imports in this Replace block without messing up the top, 
-            // I'll assume I can add the import in a separate block or just copy the logic if simple.
-            // Actually, I'll add the import in a separate tool call first to be safe, 
-            // OR I can use the 'calculateVelocity' function if I import it at the top.
-            // For now, let's just do the fetch and set.
+        client.searchTickets("status = Done", storyPointField, jiraBoardId).then(tickets => {
             import("@/lib/analysis/velocity").then(({ calculateVelocity }) => {
                 const metrics = calculateVelocity(tickets);
-                setVelocity(metrics.daysPerPoint);
+                // Only use calculated if no manual override
+                if (manualVelocity === null) {
+                    setTeamVelocity(metrics.pointsPerWeek);
+                }
             });
         }).catch(err => {
             console.error("Failed to calculate velocity:", err);
-            // Fallback
-            setVelocity(5);
+            if (manualVelocity === null) setTeamVelocity(10);
         });
-    }, [client]);
+    }, [client, manualVelocity, storyPointField]);
 
     useEffect(() => {
         // Load config from localStorage
@@ -83,32 +91,74 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const savedStale = localStorage.getItem("cadence_stale_threshold");
         if (savedStale) setStaleThreshold(parseInt(savedStale));
 
-        const savedActive = localStorage.getItem("cadence_active_jql");
+        const savedVelocity = localStorage.getItem("cadence_team_velocity");
+        if (savedVelocity) {
+            const v = parseFloat(savedVelocity);
+            setTeamVelocity(v);
+            setManualVelocity(v);
+        }
+
+        let savedActive = localStorage.getItem("cadence_active_jql");
         if (savedActive) setActiveWorkJql(savedActive);
 
         const savedFuture = localStorage.getItem("cadence_future_jql");
         if (savedFuture) setFutureIdeasJql(savedFuture);
 
-        // Initialize
+        const savedBuildLabel = localStorage.getItem("cadence_build_label");
+        if (savedBuildLabel) setBuildLabel(savedBuildLabel);
+
+        const savedPointField = localStorage.getItem("cadence_story_point_field");
+        if (savedPointField) setStoryPointField(savedPointField);
+
+        const savedBoardId = localStorage.getItem("cadence_jira_board_id");
+        if (savedBoardId) setJiraBoardId(savedBoardId);
+
+        const savedTeamName = localStorage.getItem("cadence_team_name");
+        if (savedTeamName) setTeamName(savedTeamName);
+
+        const savedTeamMembers = localStorage.getItem("cadence_team_members");
+        if (savedTeamMembers) {
+            try {
+                setTeamMembers(JSON.parse(savedTeamMembers));
+            } catch (e) {
+                console.error("Failed to parse team members", e);
+            }
+        }
+
+        // Initialize client
         if (savedMode === DataMode.JIRA) {
-            // With proxy, we don't need to read credentials from localStorage
-            // We just assume the cookie is there. JiraDataClient will handle it.
-            setClient(new JiraDataClient());
+            setClient(new JiraDataClient(false));
         } else {
-            setClient(new MockDataClient());
+            setClient(new JiraDataClient(true));
         }
 
         setIsLoading(false);
     }, []);
 
-    const updateSettings = (stale: number, activeJql: string, futureJql: string) => {
+    const updateSettings = (stale: number, activeJql: string, futureJql: string, label: string, pointField: string, boardId: string, tName: string, tMembers: { id: string; name: string; role: string }[], velocity?: number) => {
         setStaleThreshold(stale);
         setActiveWorkJql(activeJql);
         setFutureIdeasJql(futureJql);
+        setBuildLabel(label);
+        setStoryPointField(pointField);
+        setJiraBoardId(boardId);
+        setTeamName(tName);
+        setTeamMembers(tMembers);
+
+        if (velocity !== undefined) {
+            setTeamVelocity(velocity);
+            setManualVelocity(velocity);
+            localStorage.setItem("cadence_team_velocity", velocity.toString());
+        }
 
         localStorage.setItem("cadence_stale_threshold", stale.toString());
         localStorage.setItem("cadence_active_jql", activeJql);
         localStorage.setItem("cadence_future_jql", futureJql);
+        localStorage.setItem("cadence_build_label", label);
+        localStorage.setItem("cadence_story_point_field", pointField);
+        localStorage.setItem("cadence_jira_board_id", boardId);
+        localStorage.setItem("cadence_team_name", tName);
+        localStorage.setItem("cadence_team_members", JSON.stringify(tMembers));
     };
 
     const handleSetMode = (newMode: DataMode) => {
@@ -116,12 +166,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem("cadence_mode", newMode);
 
         if (newMode === DataMode.MOCK) {
-            setClient(new MockDataClient());
+            setClient(new JiraDataClient(true));
+        } else {
+            setClient(new JiraDataClient(false));
         }
     };
 
     const configureJira = () => {
-        setClient(new JiraDataClient());
+        setClient(new JiraDataClient(false));
         handleSetMode(DataMode.JIRA);
     };
 
@@ -134,9 +186,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                 configureJira,
                 isLoading,
                 staleThreshold,
+                teamVelocity,
                 activeWorkJql,
                 futureIdeasJql,
-                baselineVelocity: velocity, // Expose calculated velocity as the "baseline"
+                buildLabel,
+                storyPointField,
+                jiraBoardId,
+                teamName,
+                teamMembers,
                 updateSettings,
             }}
         >

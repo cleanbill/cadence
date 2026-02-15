@@ -33,7 +33,7 @@ export default function RootLayout({
         <DataProvider>
           <div className="w-full max-w-[1400px] bg-background min-h-screen shadow-2xl border-x mx-4 my-4 rounded-xl overflow-hidden flex flex-col">
             <SiteHeader />
-            <main className="flex-1 p-6">
+            <main className="flex-1 p-6 overflow-y-auto">
               {children}
             </main>
           </div>

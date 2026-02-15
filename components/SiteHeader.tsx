@@ -19,7 +19,7 @@ export function SiteHeader() {
         // Adding a dedicated view for stale/flagged could be good, but user asked for "options". 
         // Let's add a "Backlog Hygiene" or "Flagged" tab if needed, or just keep it in dashboard.
         // user asked "Where is the flagged ticket list options". Let's assume a new page is best for distinct focus.
-        { href: "/flagged", label: "Flagged", icon: Flag },
+        { href: "/stale", label: "Stale", icon: Flag },
     ];
 
     return (

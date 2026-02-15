@@ -4,13 +4,13 @@ import { useData } from "@/lib/data/provider";
 import { DataMode } from "@/lib/data/provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { TimeBoard } from "@/components/TimeBoard";
+import { BacklogView } from "@/components/BacklogView";
 import { LandingZoneChart } from "@/components/LandingZoneChart";
 import { useState } from "react";
 
 
 export default function Home() {
-  const { mode, isLoading, client, configureJira, setMode } = useData();
+  const { mode, isLoading, client, configureJira, setMode, teamName } = useData();
   const [jiraHost, setJiraHost] = useState("");
   const [jiraEmail, setJiraEmail] = useState("");
   const [jiraToken, setJiraToken] = useState("");
@@ -100,14 +100,17 @@ export default function Home() {
     <div className="space-y-8">
       <section>
         <div className="flex items-center justify-between space-y-2 mb-4">
-          <h2 className="text-3xl font-bold tracking-tight">Landing Zones</h2>
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">Landing Zones</h2>
+            <p className="text-muted-foreground text-sm uppercase tracking-wider font-medium">{teamName}</p>
+          </div>
         </div>
         <LandingZoneChart />
       </section>
 
       <section>
-        <h2 className="text-3xl font-bold tracking-tight mb-4">Current Sprint (Time View)</h2>
-        <TimeBoard />
+        <h2 className="text-3xl font-bold tracking-tight mb-4">Backlog & Sprint Progress</h2>
+        <BacklogView />
       </section>
     </div>
   );

@@ -12,9 +12,8 @@ import { Clock, AlertTriangle } from "lucide-react";
 const STALE_THRESHOLD_DAYS = 30; // Configurable
 const POINTS_TO_DAYS = 0.5; // 1 Point = 4 hours = 0.5 Days (assuming 8h day)
 
-function TicketCard({ ticket, velocity, jiraHost }: { ticket: JiraTicket, velocity: number, jiraHost: string | null }) {
-    const isStale = differenceInDays(new Date(), parseISO(ticket.updated)) > STALE_THRESHOLD_DAYS;
-    const days = ticket.points * velocity;
+function TicketCard({ ticket, jiraHost, staleThreshold }: { ticket: JiraTicket, jiraHost: string | null, staleThreshold: number }) {
+    const isStale = differenceInDays(new Date(), parseISO(ticket.updated)) > staleThreshold;
 
     // Construct Jira URL if host is available
     const jiraUrl = jiraHost ? `https://${jiraHost}/browse/${ticket.key}` : null;
@@ -46,8 +45,7 @@ function TicketCard({ ticket, velocity, jiraHost }: { ticket: JiraTicket, veloci
 
                 <div className="flex items-center justify-between mt-4">
                     <div className="flex items-center gap-1 text-sm font-semibold text-blue-600 dark:text-blue-400">
-                        <Clock className="h-3 w-3" />
-                        {days > 0 ? `${days.toFixed(1)}d` : "-"}
+                        {ticket.points > 0 ? `${ticket.points} pts` : <span className="text-muted-foreground font-normal italic">Unestimated</span>}
                     </div>
 
                     {ticket.assignee && (
@@ -62,24 +60,24 @@ function TicketCard({ ticket, velocity, jiraHost }: { ticket: JiraTicket, veloci
     )
 }
 
-function Column({ title, tickets, velocity, jiraHost }: { title: string, tickets: JiraTicket[], velocity: number, jiraHost: string | null }) {
-    const totalDays = tickets.reduce((acc, t) => acc + (t.points * velocity), 0);
+function Column({ title, tickets, jiraHost, staleThreshold }: { title: string, tickets: JiraTicket[], jiraHost: string | null, staleThreshold: number }) {
+    const totalPoints = tickets.reduce((acc, t) => acc + (t.points || 0), 0);
 
     return (
         <div className="flex-1 min-w-[250px] bg-muted/40 rounded-lg p-3">
             <div className="flex items-center justify-between mb-4 px-1">
                 <h3 className="font-semibold">{title}</h3>
-                <Badge variant="secondary">{Math.ceil(totalDays)}d</Badge>
+                <Badge variant="secondary">{totalPoints} pts</Badge>
             </div>
-            <div className="flex flex-col">
-                {tickets.map(t => <TicketCard key={t.id} ticket={t} velocity={velocity} jiraHost={jiraHost} />)}
+            <div className="flex flex-col gap-2">
+                {tickets.map(t => <TicketCard key={t.id} ticket={t} jiraHost={jiraHost} staleThreshold={staleThreshold} />)}
             </div>
         </div>
     )
 }
 
 export function TimeBoard() {
-    const { client, baselineVelocity, activeWorkJql } = useData();
+    const { client, teamVelocity, activeWorkJql, staleThreshold, storyPointField } = useData();
     const [tickets, setTickets] = useState<JiraTicket[]>([]);
     const [jiraHost, setJiraHost] = useState<string | null>(null);
 
@@ -91,12 +89,14 @@ export function TimeBoard() {
 
     useEffect(() => {
         if (client) {
-            // We want to show the board. If activeWorkJql is strict, it might hide things.
-            // But let's respect the "Future Ideas" exclusion at least.
-            // If activeWorkJql excludes "Done", we won't see done tickets.
-            // Let's rely on the user's JQL for now.
             const jql = activeWorkJql || "project = CAD";
-            client.searchTickets(jql).then(setTickets);
+            console.log("TimeBoard: Fetching tickets with JQL:", jql);
+            client.searchTickets(jql, storyPointField).then(results => {
+                console.log("TimeBoard: Got tickets:", results.length);
+                setTickets(results);
+            }).catch(err => {
+                console.error("TimeBoard: Fetch failed", err);
+            });
         }
     }, [client, activeWorkJql]);
 
@@ -105,12 +105,21 @@ export function TimeBoard() {
     const review = tickets.filter(t => t.status === "Code Review");
     const done = tickets.filter(t => t.status === "Done");
 
+    const totalSprintPoints = tickets.reduce((acc, t) => acc + (t.points || 0), 0);
+
     return (
-        <div className="flex gap-4 overflow-x-auto pb-4">
-            <Column title="To Do" tickets={todo} velocity={baselineVelocity} jiraHost={jiraHost} />
-            <Column title="In Progress" tickets={inProgress} velocity={baselineVelocity} jiraHost={jiraHost} />
-            <Column title="Code Review" tickets={review} velocity={baselineVelocity} jiraHost={jiraHost} />
-            <Column title="Done" tickets={done} velocity={baselineVelocity} jiraHost={jiraHost} />
+        <div className="space-y-4">
+            <div className="flex items-center gap-2 px-1">
+                <Badge variant="outline" className="text-sm px-3 py-1 bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900">
+                    Total: {totalSprintPoints} Points
+                </Badge>
+            </div>
+            <div className="flex gap-4 overflow-x-auto pb-4">
+                <Column title="To Do" tickets={todo} jiraHost={jiraHost} staleThreshold={staleThreshold} />
+                <Column title="In Progress" tickets={inProgress} jiraHost={jiraHost} staleThreshold={staleThreshold} />
+                <Column title="Code Review" tickets={review} jiraHost={jiraHost} staleThreshold={staleThreshold} />
+                <Column title="Done" tickets={done} jiraHost={jiraHost} staleThreshold={staleThreshold} />
+            </div>
         </div>
     );
 }

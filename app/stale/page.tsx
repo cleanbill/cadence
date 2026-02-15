@@ -3,43 +3,48 @@
 import { useData } from "@/lib/data/provider";
 import { JiraTicket } from "@/lib/data/api-client";
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Archive, Clock, AlertTriangle, ArrowRight } from "lucide-react";
+import { Archive, Clock, ArrowRight } from "lucide-react";
 import { differenceInDays, parseISO } from "date-fns";
 
-const STALE_THRESHOLD_DAYS = 30;
 
-export default function FlaggedPage() {
-    const { client } = useData();
+export default function StalePage() {
+    const { client, staleThreshold, activeWorkJql, buildLabel, storyPointField } = useData();
     const [staleTickets, setStaleTickets] = useState<JiraTicket[]>([]);
     const [jiraHost, setJiraHost] = useState<string | null>(null);
 
     useEffect(() => {
-        const host = localStorage.getItem("cadence_jira_host");
+        const host = localStorage.getItem("jira-domain");
         setJiraHost(host);
     }, []);
 
     useEffect(() => {
         if (!client) return;
-        client.searchTickets("status != Done").then(tickets => {
+
+        // Use configured JQL or fallback to label-based logic consistent with dashboard
+        const jql = activeWorkJql || `labels = ${buildLabel} AND statusCategory != Done`;
+
+        console.log(`[StalePage] Fetching stale tickets with JQL: ${jql}`);
+        client.searchTickets(jql, storyPointField).then(tickets => {
             const stale = tickets.filter(t =>
-                differenceInDays(new Date(), parseISO(t.updated)) > STALE_THRESHOLD_DAYS
+                differenceInDays(new Date(), parseISO(t.updated)) > staleThreshold
             );
+            console.log(`[StalePage] Found ${stale.length} stale tickets (out of ${tickets.length})`);
             setStaleTickets(stale);
         });
-    }, [client]);
+    }, [client, staleThreshold, activeWorkJql, buildLabel]);
 
     return (
         <div className="max-w-5xl mx-auto space-y-6">
             <div>
                 <h1 className="text-3xl font-bold tracking-tight text-amber-600 flex items-center gap-3">
-                    <AlertTriangle className="h-8 w-8" />
-                    Flagged / Stale Tickets
+                    <Clock className="h-8 w-8" />
+                    Stale Tickets
                 </h1>
                 <p className="text-muted-foreground">
-                    Tickets that haven't been updated in over {STALE_THRESHOLD_DAYS} days. Review them for archival or re-prioritization.
+                    Tickets that haven't been updated in over {staleThreshold} days. Review them for archival or re-prioritization.
                 </p>
             </div>
 
@@ -76,7 +81,7 @@ export default function FlaggedPage() {
                                 <div className="flex items-center gap-2 mt-2">
                                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        {ticket.assignee && <img src={ticket.assignee.avatarUrl} className="w-4 h-4 rounded-full" />}
+                                        {ticket.assignee && <img src={ticket.assignee.avatarUrl} className="w-4 h-4 rounded-full" alt="" />}
                                         {ticket.assignee?.displayName || "Unassigned"}
                                     </div>
                                 </div>
