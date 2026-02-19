@@ -38,7 +38,7 @@ const DataContext = createContext<DataContextType>({
     activeWorkJql: "statusCategory != Done",
     futureIdeasJql: "labels = future",
     buildLabel: "build",
-    storyPointField: "customfield_10026",
+    storyPointField: "customfield_10014",
     jiraBoardId: "",
     teamName: "Core Team",
     teamMembers: [],
@@ -58,7 +58,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const [activeWorkJql, setActiveWorkJql] = useState("statusCategory != Done");
     const [futureIdeasJql, setFutureIdeasJql] = useState("labels = future");
     const [buildLabel, setBuildLabel] = useState("build");
-    const [storyPointField, setStoryPointField] = useState("customfield_10026");
+    const [storyPointField, setStoryPointField] = useState("customfield_10014");
     const [jiraBoardId, setJiraBoardId] = useState("");
 
     // Team Configuration

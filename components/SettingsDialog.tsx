@@ -246,9 +246,9 @@ export function SettingsDialog() {
                                 id="point-field"
                                 value={pointField}
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPointField(e.target.value)}
-                                placeholder="customfield_10026"
+                                placeholder="customfield_10014"
                             />
-                            <p className="text-[10px] text-muted-foreground">The custom field key used in your Jira instance (e.g. customfield_10026).</p>
+                            <p className="text-[10px] text-muted-foreground">The custom field key used in your Jira instance (e.g. customfield_10014).</p>
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="board-id">Jira Board ID (Agile Fallback)</Label>

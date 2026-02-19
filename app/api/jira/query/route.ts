@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
         }
     }
 
-    if (!pointsField) pointsField = "customfield_10026";
+    if (!pointsField) pointsField = "customfield_10014";
 
     if (isMock) {
         let filtered = [...CACHED_MOCK_TICKETS];
